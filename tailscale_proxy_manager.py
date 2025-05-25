@@ -52,6 +52,9 @@ class TailscaleProxyManager:
                 self.port += 1
             print(f"Using SOCKS5 port: {self.port}")
         
+        # Handle interface selection
+        self.socks5_interface = self.config.get('socks5_interface', 'localhost')
+        
         self.tailscaled_path = self.config.get('tailscaled_path', '/usr/sbin/tailscaled')
         self.tailscale_path = self.config.get('tailscale_path', '/usr/bin/tailscale')
         
@@ -59,11 +62,26 @@ class TailscaleProxyManager:
         self.auth_token = self.config.get('auth_token', os.environ.get('TAILSCALE_AUTH_TOKEN', ''))
 
     def _generate_random_profile_name(self):
-        """Generate a friendly random profile name"""
+        """Generate a friendly random profile name that's not already in use"""
         adjectives = ["happy", "sunny", "clever", "brave", "mighty", "gentle", "wise", "calm", "swift", "bright"]
         animals = ["gorilla", "dolphin", "tiger", "eagle", "panda", "koala", "wolf", "fox", "rabbit", "turtle"]
         
-        return f"{random.choice(adjectives)}_{random.choice(animals)}"
+        # Get existing profile names
+        config_dirs = glob.glob(os.path.expanduser("~/.config/tailscale-*"))
+        cache_dirs = glob.glob(os.path.expanduser("~/.cache/tailscale-*"))
+        existing_profiles = set([os.path.basename(d).replace('tailscale-', '') for d in config_dirs + cache_dirs])
+        
+        # Try to generate a unique name (max 10 attempts)
+        for _ in range(10):
+            name = f"{random.choice(adjectives)}_{random.choice(animals)}"
+            if name not in existing_profiles:
+                return name
+        
+        # If we couldn't find a unique name, add a random number
+        while True:
+            name = f"{random.choice(adjectives)}_{random.choice(animals)}_{random.randint(1, 999)}"
+            if name not in existing_profiles:
+                return name
 
     def _create_default_config(self):
         """Create a default configuration file"""
@@ -118,7 +136,7 @@ class TailscaleProxyManager:
             '--state', self.state_dir,
             '--socket', self.socket_path,
             '--port', str(self.port),
-            '--socks5-server', f'localhost:{self.port}'
+            '--socks5-server', f'{self.socks5_interface}:{self.port}'
         ]
         
         # Add any additional tailscaled args from config
@@ -144,10 +162,10 @@ class TailscaleProxyManager:
             return False
         
         print(f"Tailscaled started with PID {self.tailscaled_process.pid}")
-        print(f"SOCKS5 proxy will be available at localhost:{self.port}")
+        print(f"SOCKS5 proxy will be available at {self.socks5_interface}:{self.port}")
         return True
 
-    def start_session(self):
+    def start_session(self, auth_token=None):
         """Start a tailscale session, authenticate, and bring up the network"""
         if not self._is_server_running():
             print("Tailscaled is not running. Please start the server first.")
@@ -171,9 +189,10 @@ class TailscaleProxyManager:
         if 'tailscale_up_args' in self.config:
             cmd.extend(self.config['tailscale_up_args'])
             
-        # Add auth token if available
-        if self.auth_token:
-            cmd.extend(['--authkey', self.auth_token])
+        # Add auth token with precedence: command line > environment > config
+        token_to_use = auth_token or self.auth_token
+        if token_to_use:
+            cmd.extend(['--authkey', token_to_use])
         
         print(f"Starting tailscale session with command: {' '.join(cmd)}")
         
@@ -406,6 +425,7 @@ def main():
     
     # Start session command
     start_session_parser = subparsers.add_parser('start-session', help='Start a tailscale session')
+    start_session_parser.add_argument('--auth-token', help='Tailscale authentication token')
     
     # Stop session command
     stop_session_parser = subparsers.add_parser('stop-session', help='Stop the tailscale session')
@@ -457,7 +477,13 @@ def main():
             print(f"Error: Tailscaled is not running for profile '{manager.profile_name}'.")
             print("Please start the server first with 'start-server' command.")
             return 1
-        success = manager.start_session()
+        
+        # Pass auth token from command line if provided
+        auth_token = None
+        if hasattr(args, 'auth_token') and args.auth_token:
+            auth_token = args.auth_token
+        
+        success = manager.start_session(auth_token)
     elif args.command == 'stop-session':
         # Check if there's anything to stop
         if not manager._is_server_running():
