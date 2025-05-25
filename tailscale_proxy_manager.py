@@ -17,11 +17,13 @@ from pathlib import Path
 class TailscaleProxyManager:
     def __init__(self, profile_name=None):
         self.profile_name = profile_name or self._generate_random_profile_name()
-        self.profile_dir = os.path.expanduser(f"~/.cache/tailscale-{self.profile_name}")
-        self.config_path = os.path.join(self.profile_dir, "config.yaml")
+        self.config_dir = os.path.expanduser(f"~/.config/tailscale-{self.profile_name}")
+        self.cache_dir = os.path.expanduser(f"~/.cache/tailscale-{self.profile_name}")
+        self.config_path = os.path.join(self.config_dir, "config.yaml")
         
-        # Ensure profile directory exists
-        os.makedirs(self.profile_dir, exist_ok=True)
+        # Ensure both directories exist
+        os.makedirs(self.config_dir, exist_ok=True)
+        os.makedirs(self.cache_dir, exist_ok=True)
         
         # Create or load config
         if not os.path.exists(self.config_path):
@@ -31,7 +33,7 @@ class TailscaleProxyManager:
         self.tailscaled_process = None
         
         # Set default values if not in config
-        self.state_dir = self.profile_dir
+        self.state_dir = self.cache_dir
         self.socket_path = self.config.get('socket_path', os.path.join(self.state_dir, 'tailscaled.sock'))
         self.port = self.config.get('socks5_port', 1080)
         self.tailscaled_path = self.config.get('tailscaled_path', '/usr/sbin/tailscaled')
@@ -52,7 +54,7 @@ class TailscaleProxyManager:
         default_config = {
             'tailscaled_path': '/usr/sbin/tailscaled',
             'tailscale_path': '/usr/bin/tailscale',
-            'socket_path': os.path.join(self.profile_dir, 'tailscaled.sock'),
+            'socket_path': os.path.join(self.cache_dir, 'tailscaled.sock'),
             'socks5_port': 1080,
             'accept_routes': True,
             'accept_dns': True,
@@ -269,7 +271,8 @@ class TailscaleProxyManager:
             'session_up': session_up,
             'socks5_port': self.port,
             'ip_address': ip_address,
-            'profile_dir': self.profile_dir
+            'config_dir': self.config_dir,
+            'cache_dir': self.cache_dir
         }
     
     def _is_server_running(self):
@@ -309,11 +312,19 @@ class TailscaleProxyManager:
 
 def get_all_profiles():
     """Get a list of all existing profiles"""
-    profile_dirs = glob.glob(os.path.expanduser("~/.cache/tailscale-*"))
+    # Look in both config and cache directories
+    config_dirs = glob.glob(os.path.expanduser("~/.config/tailscale-*"))
+    cache_dirs = glob.glob(os.path.expanduser("~/.cache/tailscale-*"))
+    
+    # Extract profile names from directory paths
+    config_profiles = [os.path.basename(d).replace('tailscale-', '') for d in config_dirs]
+    cache_profiles = [os.path.basename(d).replace('tailscale-', '') for d in cache_dirs]
+    
+    # Combine and deduplicate profile names
+    profile_names = list(set(config_profiles + cache_profiles))
     profiles = []
     
-    for profile_dir in profile_dirs:
-        profile_name = os.path.basename(profile_dir).replace('tailscale-', '')
+    for profile_name in profile_names:
         manager = TailscaleProxyManager(profile_name)
         profiles.append(manager.get_status())
     
@@ -330,7 +341,8 @@ def show_status(args):
         print(f"  Session up: {'Yes' if status['session_up'] else 'No'}")
         print(f"  SOCKS5 port: {status['socks5_port']}")
         print(f"  IP address: {status['ip_address']}")
-        print(f"  Profile directory: {status['profile_dir']}")
+        print(f"  Config directory: {status['config_dir']}")
+        print(f"  Cache directory: {status['cache_dir']}")
     else:
         profiles = get_all_profiles()
         if not profiles:
@@ -344,7 +356,8 @@ def show_status(args):
             print(f"  Session up: {'Yes' if status['session_up'] else 'No'}")
             print(f"  SOCKS5 port: {status['socks5_port']}")
             print(f"  IP address: {status['ip_address']}")
-            print(f"  Profile directory: {status['profile_dir']}")
+            print(f"  Config directory: {status['config_dir']}")
+            print(f"  Cache directory: {status['cache_dir']}")
             print()
 
 
