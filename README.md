@@ -8,7 +8,13 @@ A Tailscale SOCKS5 proxy manager for Linux, macOS, and WSL.
 
 ## Installation
 
-### Using pipx (recommended)
+### Using uv (recommended)
+
+```bash
+uv pip install tailsocks
+```
+
+### Using pipx
 
 ```bash
 pipx install tailsocks
@@ -18,12 +24,6 @@ pipx install tailsocks
 
 ```bash
 pip install tailsocks
-```
-
-### Using uv
-
-```bash
-uv pip install tailsocks
 ```
 
 ## Usage
@@ -107,15 +107,15 @@ To run the tool in development mode:
    cd tailsocks
    ```
 
-2. Create a virtual environment:
+2. Create a virtual environment using uv:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   uv venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
 3. Install in development mode:
    ```bash
-   pip install -e .
+   uv pip install -e .
    ```
 
 4. Run the tool:
