@@ -426,13 +426,43 @@ def main():
         show_status(args)
         return 0
     
+    # Handle profile selection for session commands
+    if args.command in ['start-session', 'stop-session']:
+        if not args.profile:
+            # Get all existing profiles
+            profiles = get_all_profiles()
+            
+            if not profiles:
+                print(f"Error: No profiles exist. Please create a profile first with 'start-server' command.")
+                return 1
+            
+            if len(profiles) == 1:
+                # Use the only existing profile
+                args.profile = profiles[0]['profile_name']
+                print(f"Using the only existing profile: {args.profile}")
+            else:
+                print("Error: Multiple profiles exist. Please specify a profile with --profile.")
+                print("Available profiles:")
+                for profile in profiles:
+                    print(f"  {profile['profile_name']}")
+                return 1
+    
     manager = TailscaleProxyManager(args.profile)
     
     if args.command == 'start-server':
         success = manager.start_server()
     elif args.command == 'start-session':
+        # Check if the server is running before starting a session
+        if not manager._is_server_running():
+            print(f"Error: Tailscaled is not running for profile '{manager.profile_name}'.")
+            print("Please start the server first with 'start-server' command.")
+            return 1
         success = manager.start_session()
     elif args.command == 'stop-session':
+        # Check if there's anything to stop
+        if not manager._is_server_running():
+            print(f"Error: No tailscale services are running for profile '{manager.profile_name}'.")
+            return 1
         success = manager.stop_session()
     elif args.command == 'stop-server':
         success = manager.stop_server()
