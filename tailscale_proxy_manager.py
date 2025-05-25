@@ -35,7 +35,23 @@ class TailscaleProxyManager:
         # Set default values if not in config
         self.state_dir = self.cache_dir
         self.socket_path = self.config.get('socket_path', os.path.join(self.state_dir, 'tailscaled.sock'))
-        self.port = self.config.get('socks5_port', 1080)
+        
+        # Handle port selection logic
+        if 'socks5_port' in self.config:
+            # If port is explicitly configured, verify it's available
+            self.port = self.config['socks5_port']
+            if self._is_port_in_use(self.port):
+                print(f"Error: Configured SOCKS5 port {self.port} is already in use by another process.")
+                print("Please modify your config.yaml to use a different port.")
+                sys.exit(1)
+        else:
+            # If port is not configured, start with default and find an available port
+            self.port = 1080
+            while self._is_port_in_use(self.port):
+                print(f"Port {self.port} is already in use, trying port {self.port + 1}")
+                self.port += 1
+            print(f"Using SOCKS5 port: {self.port}")
+        
         self.tailscaled_path = self.config.get('tailscaled_path', '/usr/sbin/tailscaled')
         self.tailscale_path = self.config.get('tailscale_path', '/usr/bin/tailscale')
         
@@ -55,7 +71,6 @@ class TailscaleProxyManager:
             'tailscaled_path': '/usr/sbin/tailscaled',
             'tailscale_path': '/usr/bin/tailscale',
             'socket_path': os.path.join(self.cache_dir, 'tailscaled.sock'),
-            'socks5_port': 1080,
             'accept_routes': True,
             'accept_dns': True,
             'tailscaled_args': ['--verbose=1'],
@@ -84,6 +99,19 @@ class TailscaleProxyManager:
         if self._is_server_running():
             print("Tailscaled is already running")
             return True
+        
+        # Double-check the port is still available before starting
+        if self._is_port_in_use(self.port):
+            print(f"Error: SOCKS5 port {self.port} is now in use by another process.")
+            if 'socks5_port' in self.config:
+                print("Please modify your config.yaml to use a different port.")
+                return False
+            else:
+                # Try to find another port
+                original_port = self.port
+                while self._is_port_in_use(self.port):
+                    self.port += 1
+                print(f"Switched from port {original_port} to port {self.port}")
         
         cmd = [
             self.tailscaled_path,
@@ -298,6 +326,12 @@ class TailscaleProxyManager:
         except (subprocess.SubprocessError, subprocess.TimeoutExpired):
             return False
     
+    def _is_port_in_use(self, port):
+        """Check if the given port is already in use"""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
+            
     def _find_tailscaled_pid(self):
         """Try to find the PID of the tailscaled process"""
         try:
