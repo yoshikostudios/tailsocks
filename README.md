@@ -14,10 +14,10 @@ A Tailscale SOCKS5 proxy manager for Linux, macOS, and WSL.
 uv pip install tailsocks
 ```
 
-### Using pipx
+### Using uvx
 
 ```bash
-pipx install tailsocks
+uvx install tailsocks
 ```
 
 ### Using pip
