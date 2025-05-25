@@ -17,14 +17,17 @@ uv pip install tailsocks
 ### Using uvx
 
 ```bash
-uvx install tailsocks
+uvx tailsocks
 ```
+This will install tailsocks if needed and immediately execute it.
 
 ### Using pip
 
 ```bash
 pip install tailsocks
 ```
+
+After installation, you can run `tailsocks` directly from your terminal.
 
 ## Usage
 
