@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tailsocks"
+version = "0.1.0"
+description = "A Tailscale SOCKS5 proxy manager"
+readme = "README.md"
+authors = [
+    {name = "James Dixson", email = "james@yoshikostudios.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Topic :: System :: Networking",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+tailsocks = "tailsocks.cli:main"
+
+[project.urls]
+"Homepage" = "https://github.com/yoshikostudios/tailsocks"
+"Bug Tracker" = "https://github.com/yoshikostudios/tailsocks/issues"

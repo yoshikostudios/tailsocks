@@ -1,2 +1,2 @@
-# Tailscale Proxy Manager dependencies
+# tailsocks dependencies
 pyyaml>=6.0
