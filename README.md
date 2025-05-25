@@ -19,7 +19,15 @@ uv pip install tailsocks
 ```bash
 uvx tailsocks
 ```
-This will install tailsocks if needed and immediately execute it.
+This will install tailsocks if not already present and immediately execute it.
+
+### Upgrading
+
+To upgrade to the latest version:
+
+```bash
+uv pip install --upgrade tailsocks
+```
 
 ### Using pip
 
