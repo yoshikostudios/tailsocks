@@ -124,12 +124,17 @@ To run the tool in development mode:
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-3. Install in development mode:
+3. Install in development mode with test dependencies:
    ```bash
-   uv pip install -e .
+   uv pip install -e ".[test]"
    ```
 
-4. Run the tool:
+4. Run tests:
+   ```bash
+   pytest
+   ```
+
+5. Run the tool:
    ```bash
    python -m tailsocks
    ```
