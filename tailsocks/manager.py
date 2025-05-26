@@ -42,12 +42,9 @@ class TailscaleProxyManager:
         self.state_dir = self.cache_dir
         self.socket_path = self.config.get('socket_path', os.path.join(self.state_dir, 'tailscaled.sock'))
         
-        # Get the configured port but don't check availability yet
-        # We'll check availability only when starting the server
-        self.port = self.config.get('socks5_port', 1080)
-        
-        # Handle interface selection
-        self.socks5_interface = self.config.get('socks5_interface', 'localhost')
+        # Parse bind address and port
+        bind_config = self.config.get('bind', 'localhost:1080')
+        self.bind_address, self.port = self._parse_bind_address(bind_config)
         
         # Set paths based on OS
         system = platform.system()
@@ -89,6 +86,23 @@ class TailscaleProxyManager:
             if name not in existing_profiles:
                 return name
 
+    def _parse_bind_address(self, bind_string):
+        """Parse a bind string in the format 'address:port' or just 'port'"""
+        if ':' in bind_string:
+            address, port_str = bind_string.rsplit(':', 1)
+            try:
+                return address, int(port_str)
+            except ValueError:
+                print(f"Invalid port in bind address: {bind_string}, using default 1080")
+                return address, 1080
+        else:
+            # If only a port is provided
+            try:
+                return 'localhost', int(bind_string)
+            except ValueError:
+                print(f"Invalid port: {bind_string}, using default 1080")
+                return 'localhost', 1080
+
     def _create_default_config(self):
         """Create a default configuration file"""
         system = platform.system()
@@ -108,7 +122,7 @@ class TailscaleProxyManager:
             'socket_path': os.path.join(self.cache_dir, 'tailscaled.sock'),
             'accept_routes': True,
             'accept_dns': True,
-            'socks5_interface': 'localhost',
+            'bind': 'localhost:1080',
             'tailscaled_args': ['--verbose=1'],
             'tailscale_up_args': [f'--hostname={self.profile_name}-proxy']
         }
@@ -137,18 +151,18 @@ class TailscaleProxyManager:
             return True
         
         # Check port availability only when starting the server
-        if 'socks5_port' in self.config:
-            # If port is explicitly configured, verify it's available
+        if 'bind' in self.config:
+            # If bind is explicitly configured, verify the port is available
             if self._is_port_in_use(self.port):
-                print(f"Error: Configured SOCKS5 port {self.port} is already in use by another process.")
+                print(f"Error: Configured port {self.port} in bind address {self.bind_address}:{self.port} is already in use.")
                 print("Please modify your config.yaml to use a different port.")
                 return False
         else:
-            # If port is not configured, start with default and find an available port
+            # If bind is not configured, start with default and find an available port
             while self._is_port_in_use(self.port):
                 print(f"Port {self.port} is already in use, trying port {self.port + 1}")
                 self.port += 1
-            print(f"Using SOCKS5 port: {self.port}")
+            print(f"Using bind address: {self.bind_address}:{self.port}")
         
         # Create a state file path instead of just using the directory
         state_file = os.path.join(self.state_dir, "tailscale.state")
@@ -157,7 +171,7 @@ class TailscaleProxyManager:
             self.tailscaled_path,
             '--state', state_file,  # Use the state file path instead of just the directory
             '--socket', self.socket_path,
-            '--socks5-server', f'{self.socks5_interface}:{self.port}',
+            '--socks5-server', f'{self.bind_address}:{self.port}',
             '--tun=userspace-networking'
         ]
         
@@ -337,7 +351,7 @@ class TailscaleProxyManager:
             'profile_name': self.profile_name,
             'server_running': server_running,
             'session_up': session_up,
-            'socks5_port': self.port,
+            'bind': f'{self.bind_address}:{self.port}',
             'ip_address': ip_address,
             'config_dir': self.config_dir,
             'cache_dir': self.cache_dir

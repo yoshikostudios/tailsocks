@@ -47,6 +47,24 @@ tailsocks start-server
 
 This will create a new profile with a random name and start a tailscaled process.
 
+### Starting a proxy server with a specific bind address
+
+```bash
+tailsocks start-server --bind 127.0.0.1:1080
+```
+
+You can specify just the port to use the default localhost address:
+
+```bash
+tailsocks start-server --bind 1080
+```
+
+Or bind to all interfaces:
+
+```bash
+tailsocks start-server --bind 0.0.0.0:1080
+```
+
 ### Starting a Tailscale session
 
 ```bash
@@ -100,8 +118,7 @@ tailscale_path: /usr/bin/tailscale
 socket_path: /home/user/.cache/tailscale-my_profile/tailscaled.sock
 accept_routes: true
 accept_dns: true
-socks5_port: 1080
-socks5_interface: localhost
+bind: localhost:1080  # Format: address:port
 tailscaled_args:
   - --verbose=1
 tailscale_up_args:

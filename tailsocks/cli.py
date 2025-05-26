@@ -16,7 +16,7 @@ def show_status(args):
         print(f"Profile: {status['profile_name']}")
         print(f"  Server running: {'Yes' if status['server_running'] else 'No'}")
         print(f"  Session up: {'Yes' if status['session_up'] else 'No'}")
-        print(f"  SOCKS5 port: {status['socks5_port']}")
+        print(f"  Bind address: {status['bind']}")
         print(f"  IP address: {status['ip_address']}")
         print(f"  Config directory: {status['config_dir']}")
         print(f"  Cache directory: {status['cache_dir']}")
@@ -47,7 +47,8 @@ def main():
     subparsers = parser.add_subparsers(dest='command', help='Command to execute')
     
     # Start server command
-    subparsers.add_parser('start-server', help='Start the tailscaled process')
+    start_server_parser = subparsers.add_parser('start-server', help='Start the tailscaled process')
+    start_server_parser.add_argument('--bind', help='Bind address and port (format: address:port or just port)')
     
     # Start session command
     start_session_parser = subparsers.add_parser('start-session', help='Start a tailscale session')
@@ -101,6 +102,11 @@ def main():
     manager = TailscaleProxyManager(args.profile)
     
     if args.command == 'start-server':
+        # If bind is specified, update the manager's config
+        if hasattr(args, 'bind') and args.bind:
+            bind_address, port = manager._parse_bind_address(args.bind)
+            manager.bind_address = bind_address
+            manager.port = port
         success = manager.start_server()
     elif args.command == 'start-session':
         # Check if the server is running before starting a session
