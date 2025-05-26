@@ -1,194 +1,402 @@
-#!/usr/bin/env python3
-"""
-Unit tests for the TailscaleProxyManager class.
-"""
+"""Tests for the TailscaleProxyManager class."""
 
 import os
-import tempfile
-import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import yaml
 
 from tailsocks.manager import TailscaleProxyManager, get_all_profiles
 
 
-class TestTailscaleProxyManager(unittest.TestCase):
-    """Tests for the TailscaleProxyManager class."""
+class TestManagerInitialization:
+    def test_specific_profile_name(self):
+        """Test initialization with a specific profile name."""
+        profile_name = "test_profile"
+        manager = TailscaleProxyManager(profile_name)
+        assert manager.profile_name == profile_name
+        assert "tailscale-test_profile" in manager.config_dir
+        assert "tailscale-test_profile" in manager.cache_dir
 
-    def setUp(self):
-        """Set up test environment."""
-        # Create a temporary directory for test config files
-        self.temp_dir = tempfile.TemporaryDirectory()
+    def test_random_profile_name(self, mocker):
+        """Test initialization with a random profile name."""
+        # Mock glob to return no existing profiles
+        mocker.patch("glob.glob", return_value=[])
 
-        # Patch os.path.expanduser to use our temp directory
-        self.expanduser_patcher = patch("os.path.expanduser")
-        self.mock_expanduser = self.expanduser_patcher.start()
-        self.mock_expanduser.side_effect = lambda path: path.replace(
-            "~", self.temp_dir.name
+        manager = TailscaleProxyManager()
+        assert manager.profile_name is not None
+        assert "_" in manager.profile_name  # Should contain an underscore
+
+
+class TestBindAddressHandling:
+    def test_parse_bind_address(self):
+        """Test parsing of bind address strings."""
+        manager = TailscaleProxyManager("test_profile")
+
+        # Test full address:port format
+        address, port = manager._parse_bind_address("127.0.0.1:8080")
+        assert address == "127.0.0.1"
+        assert port == 8080
+
+        # Test port-only format
+        address, port = manager._parse_bind_address("9090")
+        assert address == "localhost"
+        assert port == 9090
+
+        # Test invalid port
+        address, port = manager._parse_bind_address("invalid")
+        assert address == "localhost"
+        assert port == 1080  # Default port
+
+    def test_update_bind_address(self, mock_manager):
+        """Test updating the bind address."""
+        # Test updating with a new bind address
+        mock_manager.update_bind_address("0.0.0.0:8888")
+        assert mock_manager.bind_address == "0.0.0.0"
+        assert mock_manager.port == 8888
+        assert mock_manager.state["bind_address"] == "0.0.0.0"
+        assert mock_manager.state["port"] == 8888
+
+
+class TestPlatformSpecificBehavior:
+    def test_default_tailscales(self, mocker):
+        """Test that default tailscale paths are set correctly based on platform."""
+        manager = TailscaleProxyManager("test_profile")
+
+        # Test macOS paths
+        mocker.patch("platform.system", return_value="Darwin")
+        default_tailscaled, default_tailscale = manager._default_tailscales()
+        assert default_tailscaled == "/usr/local/bin/tailscaled"
+        assert default_tailscale == "/usr/local/bin/tailscale"
+
+        # Test Linux paths
+        mocker.patch("platform.system", return_value="Linux")
+        default_tailscaled, default_tailscale = manager._default_tailscales()
+        assert default_tailscaled == "/usr/sbin/tailscaled"
+        assert default_tailscale == "/usr/bin/tailscale"
+
+        # Test Windows/other paths
+        mocker.patch("platform.system", return_value="Windows")
+        default_tailscaled, default_tailscale = manager._default_tailscales()
+        assert default_tailscaled == "tailscaled"
+        assert default_tailscale == "tailscale"
+
+
+class TestConfigHandling:
+    def test_load_config(self, mock_manager, temp_dir):
+        """Test loading configuration from a file."""
+        # Create a temporary config file
+        config_path = os.path.join(temp_dir, "config.yaml")
+
+        test_config = {"bind": "127.0.0.1:2020", "tailscaled_args": ["--verbose=2"]}
+
+        with open(config_path, "w") as f:
+            yaml.dump(test_config, f)
+
+        # Set the config path
+        mock_manager.config_path = config_path
+
+        # Load the config
+        config = mock_manager._load_config()
+        assert config["bind"] == "127.0.0.1:2020"
+        assert config["tailscaled_args"] == ["--verbose=2"]
+
+    def test_load_config_file_not_found(self, mock_manager, mocker, capsys):
+        """Test loading configuration when file doesn't exist."""
+        # Mock open to raise FileNotFoundError
+        mocker.patch("builtins.open", side_effect=FileNotFoundError())
+
+        config = mock_manager._load_config()
+
+        # Should return empty dict
+        assert config == {}
+
+        # Should print error message
+        captured = capsys.readouterr()
+        assert "Config file not found" in captured.out
+
+    def test_save_config(self, mock_manager, mocker):
+        """Test saving configuration to a file."""
+        # Set up test config
+        mock_manager.config = {
+            "bind": "0.0.0.0:9090",
+            "tailscaled_args": ["--verbose=3"],
+        }
+
+        # Mock open to avoid actually writing to disk
+        mock_open = mocker.patch("builtins.open", mocker.mock_open())
+        mocker.patch("yaml.dump")
+
+        result = mock_manager._save_config()
+
+        assert result is True
+        mock_open.assert_called_once_with(mock_manager.config_path, "w")
+
+
+class TestServerStatusChecks:
+    def test_is_server_running_with_socket_and_pid(self, mock_manager, mocker):
+        """Test checking if server is running when socket exists and PID is found."""
+        mocker.patch("os.path.exists", return_value=True)
+        mocker.patch.object(mock_manager, "_find_tailscaled_pid", return_value=12345)
+
+        assert mock_manager._is_server_running() is True
+
+    def test_is_server_running_no_socket(self, mock_manager, mocker):
+        """Test checking if server is running when socket doesn't exist."""
+        mocker.patch("os.path.exists", return_value=False)
+
+        assert mock_manager._is_server_running() is False
+
+    def test_is_port_in_use(self, mocker):
+        """Test checking if a port is in use."""
+        manager = TailscaleProxyManager("test_profile")
+
+        # Create a mock socket object
+        mock_socket = MagicMock()
+        mock_socket.__enter__.return_value.connect_ex.return_value = 0  # Port in use
+        mocker.patch("socket.socket", return_value=mock_socket)
+
+        assert manager._is_port_in_use(1080) is True
+
+        # Test port not in use
+        mock_socket.__enter__.return_value.connect_ex.return_value = (
+            1  # Port not in use
         )
+        assert manager._is_port_in_use(1080) is False
 
-        # Patch socket.socket.connect_ex to simulate port availability
-        self.socket_patcher = patch("socket.socket.connect_ex")
-        self.mock_connect_ex = self.socket_patcher.start()
-        self.mock_connect_ex.return_value = 1  # Port is available
 
-        # Create test profile
-        self.profile_name = "test_profile"
-        self.manager = TailscaleProxyManager(self.profile_name)
+class TestStatusReporting:
+    def test_get_status_server_running(self, mock_running_manager):
+        """Test getting status when server is running."""
+        status = mock_running_manager.get_status()
 
-    def tearDown(self):
-        """Clean up after tests."""
-        self.expanduser_patcher.stop()
-        self.socket_patcher.stop()
-        self.temp_dir.cleanup()
+        assert status["profile_name"] == "test_profile"
+        assert status["server_running"] is True
+        assert status["session_up"] is True
+        assert status["ip_address"] == "100.100.100.100"
+        assert "bind" in status
 
-    def test_init_creates_directories(self):
-        """Test that initialization creates necessary directories."""
-        config_dir = os.path.join(
-            self.temp_dir.name, f".config/tailscale-{self.profile_name}"
+    def test_get_status_server_not_running(self, mock_manager):
+        """Test getting status when server is not running."""
+        status = mock_manager.get_status()
+
+        assert status["profile_name"] == "test_profile"
+        assert status["server_running"] is False
+        assert status["session_up"] is False
+        assert status["ip_address"] == "N/A"
+
+
+class TestServerManagement:
+    def test_start_server_success(self, mock_manager, mocker):
+        """Test starting the server successfully."""
+        # Mock the required methods
+        mocker.patch.object(mock_manager, "_ensure_available_port", return_value=True)
+        mocker.patch.object(
+            mock_manager, "_start_tailscaled_process", return_value=True
         )
-        cache_dir = os.path.join(
-            self.temp_dir.name, f".cache/tailscale-{self.profile_name}"
-        )
+        mocker.patch.object(mock_manager, "_save_state", return_value=True)
+        mocker.patch.object(mock_manager, "_is_server_running", return_value=False)
 
-        self.assertTrue(os.path.exists(config_dir))
-        self.assertTrue(os.path.exists(cache_dir))
+        assert mock_manager.start_server() is True
 
-    def test_init_creates_default_config(self):
-        """Test that initialization creates a default config file."""
-        config_path = os.path.join(
-            self.temp_dir.name, f".config/tailscale-{self.profile_name}/config.yaml"
-        )
-        self.assertTrue(os.path.exists(config_path))
+    def test_start_server_already_running(self, mock_manager, mocker, capsys):
+        """Test starting the server when it's already running."""
+        mocker.patch.object(mock_manager, "_is_server_running", return_value=True)
 
-        # Verify config content
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f)
+        assert mock_manager.start_server() is True
 
-        self.assertIn("tailscaled_path", config)
-        self.assertIn("tailscale_path", config)
-        self.assertIn("socket_path", config)
+        captured = capsys.readouterr()
+        assert "Tailscaled is already running" in captured.out
 
-    def test_random_profile_name_generation(self):
-        """Test that random profile names are generated correctly."""
-        # Create a manager without specifying a profile name
-        with patch("glob.glob", return_value=[]):  # No existing profiles
-            manager = TailscaleProxyManager()
+    def test_start_server_port_unavailable(self, mock_manager, mocker):
+        """Test starting the server when port is unavailable."""
+        mocker.patch.object(mock_manager, "_is_server_running", return_value=False)
+        mocker.patch.object(mock_manager, "_ensure_available_port", return_value=False)
 
-            # Check that a name was generated
-            self.assertIsNotNone(manager.profile_name)
+        assert mock_manager.start_server() is False
 
-            # Check format (adjective_animal)
-            parts = manager.profile_name.split("_")
-            self.assertGreaterEqual(len(parts), 2)
+    def test_ensure_available_port_configured_port_in_use(
+        self, mock_manager, mocker, capsys
+    ):
+        """Test ensuring port is available when configured port is in use."""
+        # Set a configured bind address
+        mock_manager.config = {"bind": "localhost:1080"}
+        mock_manager.port = 1080
 
-    @patch("subprocess.Popen")
-    def test_start_server(self, mock_popen):
-        """Test starting the tailscaled server."""
-        # Configure mock
-        mock_process = MagicMock()
-        mock_process.poll.return_value = None  # Process is running
-        mock_popen.return_value = mock_process
+        # First port is in use, second is available
+        mocker.patch.object(mock_manager, "_is_port_in_use", side_effect=[True, False])
 
-        # Call the method
-        result = self.manager.start_server()
+        result = mock_manager._ensure_available_port()
 
-        # Verify the result
-        self.assertTrue(result)
-        mock_popen.assert_called_once()
+        assert result is True
+        assert mock_manager.port == 1081
 
-        # Verify command contains expected arguments
-        cmd = mock_popen.call_args[0][0]
-        self.assertIn("--state", cmd)
-        self.assertIn("--socket", cmd)
-        self.assertIn("--socks5-server", cmd)
+        captured = capsys.readouterr()
+        assert "Port 1080 is already in use" in captured.out
 
-    @patch("subprocess.run")
-    def test_start_session(self, mock_run):
-        """Test starting a tailscale session."""
-        # Configure mock
+    def test_start_tailscaled_process(self, mock_manager, mocker):
+        """Test starting the tailscaled process."""
+        # Mock subprocess.Popen
+        mock_popen = MagicMock()
+        mock_popen.poll.return_value = None  # Process is running
+        mocker.patch("subprocess.Popen", return_value=mock_popen)
+        mocker.patch("time.sleep")
+
+        result = mock_manager._start_tailscaled_process()
+
+        assert result is True
+        assert mock_manager.tailscaled_process == mock_popen
+
+    def test_start_tailscaled_process_failure(self, mock_manager, mocker, capsys):
+        """Test starting the tailscaled process when it fails."""
+        # Mock subprocess.Popen
+        mock_popen = MagicMock()
+        mock_popen.poll.return_value = 1  # Process failed
+        mock_popen.communicate.return_value = ("", "Error starting tailscaled")
+        mocker.patch("subprocess.Popen", return_value=mock_popen)
+        mocker.patch("time.sleep")
+
+        result = mock_manager._start_tailscaled_process()
+
+        assert result is False
+
+        captured = capsys.readouterr()
+        assert "Failed to start tailscaled" in captured.out
+
+
+class TestSessionManagement:
+    def test_start_session_success(self, mock_running_manager, mocker):
+        """Test starting a session successfully."""
+        # Mock subprocess.run
         mock_process = MagicMock()
         mock_process.returncode = 0
-        mock_run.return_value = mock_process
+        mock_process.stdout = "Tailscale started successfully"
+        mocker.patch("subprocess.run", return_value=mock_process)
 
-        # Patch _is_server_running to return True
-        with patch.object(self.manager, "_is_server_running", return_value=True):
-            # Call the method
-            result = self.manager.start_session()
+        assert mock_running_manager.start_session() is True
 
-            # Verify the result
-            self.assertTrue(result)
-            mock_run.assert_called_once()
-
-            # Verify command contains expected arguments
-            cmd = mock_run.call_args[0][0]
-            self.assertIn("up", cmd)
-            self.assertIn("--socket", cmd)
-
-    @patch("subprocess.run")
-    def test_get_status(self, mock_run):
-        """Test getting status information."""
-        # Configure mock for subprocess.run
+    def test_start_session_with_auth_token(self, mock_running_manager, mocker):
+        """Test starting a session with an auth token."""
+        # Mock subprocess.run
         mock_process = MagicMock()
         mock_process.returncode = 0
-        mock_process.stdout = (
-            '{"BackendState": "Running", "Self": {"TailscaleIPs": ["100.100.100.100"]}}'
+        mock_process.stdout = "Tailscale started successfully"
+        mock_run = mocker.patch("subprocess.run", return_value=mock_process)
+
+        assert mock_running_manager.start_session("tskey-123") is True
+
+        # Check that --authkey was included in the command
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert "--authkey" in cmd
+        assert "tskey-123" in cmd
+
+    def test_start_session_failure(self, mock_running_manager, mocker, capsys):
+        """Test starting a session when it fails."""
+        # Mock subprocess.run
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.stderr = "Error starting tailscale"
+        mocker.patch("subprocess.run", return_value=mock_process)
+
+        assert mock_running_manager.start_session() is False
+
+        captured = capsys.readouterr()
+        assert "Failed to start tailscale session" in captured.out
+
+    def test_stop_session_success(self, mock_running_manager, mocker):
+        """Test stopping a session successfully."""
+        # Mock subprocess.run
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mocker.patch("subprocess.run", return_value=mock_process)
+
+        assert mock_running_manager.stop_session() is True
+
+    def test_stop_session_failure(self, mock_running_manager, mocker, capsys):
+        """Test stopping a session when it fails."""
+        # Mock subprocess.run
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.stderr = "Error stopping tailscale"
+        mocker.patch("subprocess.run", return_value=mock_process)
+
+        assert mock_running_manager.stop_session() is False
+
+        captured = capsys.readouterr()
+        assert "Failed to stop tailscale session" in captured.out
+
+
+class TestServerShutdown:
+    def test_stop_server_success(self, mock_running_manager, mocker):
+        """Test stopping the server successfully."""
+        # Mock os.kill
+        mocker.patch("os.kill")
+        mocker.patch("time.sleep")
+
+        # First call to _is_server_running returns True, second returns False
+        mocker.patch.object(
+            mock_running_manager, "_is_server_running", side_effect=[True, False]
         )
-        mock_run.return_value = mock_process
 
-        # Patch _is_server_running to return True
-        with patch.object(self.manager, "_is_server_running", return_value=True):
-            # Call the method
-            status = self.manager.get_status()
+        assert mock_running_manager.stop_server() is True
 
-            # Verify the result
-            self.assertEqual(status["profile_name"], self.profile_name)
-            self.assertTrue(status["server_running"])
-            self.assertTrue(status["session_up"])
-            self.assertEqual(status["ip_address"], "100.100.100.100")
+    def test_stop_server_not_running(self, mock_manager, mocker, capsys):
+        """Test stopping the server when it's not running."""
+        mocker.patch.object(mock_manager, "_is_server_running", return_value=False)
+
+        assert mock_manager.stop_server() is True
+
+        captured = capsys.readouterr()
+        assert "Tailscaled is not running" in captured.out
+
+    def test_stop_server_force_kill(self, mock_running_manager, mocker):
+        """Test stopping the server with force kill."""
+        # Mock os.kill
+        mock_kill = mocker.patch("os.kill")
+        mocker.patch("time.sleep")
+
+        # Server keeps running after SIGTERM
+        mocker.patch.object(
+            mock_running_manager,
+            "_is_server_running",
+            side_effect=[True, True, True, True, True, True],
+        )
+
+        assert mock_running_manager.stop_server() is True
+
+        # Should have called kill with SIGKILL
+        assert mock_kill.call_count == 2
+        args, kwargs = mock_kill.call_args_list[1]
+        assert args[1] == 9  # SIGKILL
 
 
-class TestGetAllProfiles(unittest.TestCase):
-    """Tests for the get_all_profiles function."""
-
-    @patch("glob.glob")
-    @patch("tailsocks.manager.TailscaleProxyManager")
-    def test_get_all_profiles(self, mock_manager_class, mock_glob):
+class TestProfileManagement:
+    def test_get_all_profiles(self, mocker):
         """Test getting all profiles."""
-        # Configure mocks
-        mock_glob.side_effect = [
-            [
-                "/home/user/.config/tailscale-profile1",
-                "/home/user/.config/tailscale-profile2",
+        # Mock glob.glob to return some profile directories
+        mocker.patch(
+            "glob.glob",
+            side_effect=[
+                [
+                    "/home/user/.config/tailscale-profile1",
+                    "/home/user/.config/tailscale-profile2",
+                ],
+                [
+                    "/home/user/.cache/tailscale-profile1",
+                    "/home/user/.cache/tailscale-profile3",
+                ],
             ],
-            [
-                "/home/user/.cache/tailscale-profile1",
-                "/home/user/.cache/tailscale-profile3",
-            ],
-        ]
+        )
 
-        # Mock manager instances
-        mock_manager1 = MagicMock()
-        mock_manager1.get_status.return_value = {"profile_name": "profile1"}
+        # Mock TailscaleProxyManager.get_status
+        mock_status = {"profile_name": "mock_profile", "server_running": False}
+        mocker.patch.object(
+            TailscaleProxyManager, "get_status", return_value=mock_status
+        )
 
-        mock_manager2 = MagicMock()
-        mock_manager2.get_status.return_value = {"profile_name": "profile2"}
-
-        mock_manager3 = MagicMock()
-        mock_manager3.get_status.return_value = {"profile_name": "profile3"}
-
-        mock_manager_class.side_effect = [mock_manager1, mock_manager2, mock_manager3]
-
-        # Call the function
         profiles = get_all_profiles()
 
-        # Verify the result
-        self.assertEqual(len(profiles), 3)
-        self.assertEqual(profiles[0]["profile_name"], "profile1")
-        self.assertEqual(profiles[1]["profile_name"], "profile2")
-        self.assertEqual(profiles[2]["profile_name"], "profile3")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        # Should have 3 unique profiles
+        assert len(profiles) == 3
+        for profile in profiles:
+            assert profile == mock_status

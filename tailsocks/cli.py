@@ -63,7 +63,7 @@ def _require_profile_selection(args, command_name):
 
     if not profiles:
         print(
-            f"Error: No profiles exist. Please create a profile first with 'start-server' command."
+            "Error: No profiles exist. Please create a profile first with 'start-server' command."
         )
         return None
 
@@ -133,20 +133,21 @@ def _handle_delete_profile(manager):
         )
         print("Please stop the server first with 'stop-server' command.")
         return False
-    
+
     # Delete the profile
-    import shutil
     import os
-    
+    import shutil
+
     config_dir = manager.config_dir
     cache_dir = manager.cache_dir
-    
+
     # Confirm both directories exist and are within the expected parent directories
-    if (os.path.exists(config_dir) and 
-        os.path.exists(cache_dir) and
-        "/.config/tailscale-" in config_dir and
-        "/.cache/tailscale-" in cache_dir):
-        
+    if (
+        os.path.exists(config_dir)
+        and os.path.exists(cache_dir)
+        and "/.config/tailscale-" in config_dir
+        and "/.cache/tailscale-" in cache_dir
+    ):
         try:
             # Remove the directories
             shutil.rmtree(config_dir, ignore_errors=True)
@@ -157,8 +158,48 @@ def _handle_delete_profile(manager):
             print(f"Error deleting profile: {str(e)}")
             return False
     else:
-        print(f"Error: Could not locate profile directories for '{manager.profile_name}'.")
+        print(
+            f"Error: Could not locate profile directories for '{manager.profile_name}'."
+        )
         return False
+
+
+def handle_command(args):
+    """Handle the command specified in the arguments."""
+    if args.command == "status":
+        show_status(args)
+        return 0
+
+    # Handle profile selection for all commands except status
+    if args.command in [
+        "start-server",
+        "start-session",
+        "stop-session",
+        "stop-server",
+        "delete-profile",
+    ]:
+        profile_name = _require_profile_selection(args, args.command)
+        if not profile_name:
+            return 1
+        args.profile = profile_name
+
+    manager = TailscaleProxyManager(args.profile)
+
+    # Dispatch to the appropriate command handler
+    if args.command == "start-server":
+        success = _handle_start_server(manager, args)
+    elif args.command == "start-session":
+        success = _handle_start_session(manager, args)
+    elif args.command == "stop-session":
+        success = _handle_stop_session(manager)
+    elif args.command == "stop-server":
+        success = _handle_stop_server(manager)
+    elif args.command == "delete-profile":
+        success = _handle_delete_profile(manager)
+    else:
+        return 1
+
+    return 0 if success else 1
 
 
 def main():
@@ -215,35 +256,7 @@ def main():
         parser.print_help()
         return 1
 
-    if args.command == "status":
-        show_status(args)
-        return 0
-
-    # Handle profile selection for all commands except status
-    if args.command in ["start-server", "start-session", "stop-session", "stop-server", "delete-profile"]:
-        profile_name = _require_profile_selection(args, args.command)
-        if not profile_name:
-            return 1
-        args.profile = profile_name
-
-    manager = TailscaleProxyManager(args.profile)
-
-    # Dispatch to the appropriate command handler
-    if args.command == "start-server":
-        success = _handle_start_server(manager, args)
-    elif args.command == "start-session":
-        success = _handle_start_session(manager, args)
-    elif args.command == "stop-session":
-        success = _handle_stop_session(manager)
-    elif args.command == "stop-server":
-        success = _handle_stop_server(manager)
-    elif args.command == "delete-profile":
-        success = _handle_delete_profile(manager)
-    else:
-        parser.print_help()
-        return 1
-
-    return 0 if success else 1
+    return handle_command(args)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ typing-extensions>=4.0.0; python_version < "3.8"
 # Test dependencies
 pytest==7.4.3
 pytest-cov==4.1.0
+pytest-mock==3.12.0
 attrs==23.1.0
 
 # Development dependencies
