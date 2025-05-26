@@ -37,18 +37,29 @@ def main():
 
     # Check if ruff is installed
     try:
-        subprocess.run(["ruff", "--version"], capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        print("Error: ruff is not installed or not in PATH.")
-        print("Install it with: pip install ruff")
-        print("Or preferably: uv pip install ruff")
-        return False
+        # Try to use the ruff from the current Python environment
+        # This will work in virtual environments where ruff is installed
+        import sys
+        ruff_cmd = [sys.executable, "-m", "ruff"]
+        subprocess.run(ruff_cmd + ["--version"], capture_output=True, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError, ImportError):
+        # Fall back to system ruff if available
+        try:
+            subprocess.run(["ruff", "--version"], capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            print("Error: ruff is not installed or not in PATH.")
+            print("Install it with: pip install ruff")
+            print("Or preferably: uv pip install ruff")
+            return False
 
+    # Use the Python module approach to run ruff
+    ruff_cmd = [sys.executable, "-m", "ruff"]
+    
     # Run ruff linting with auto-fix
-    lint_success = run_command(["ruff", "check", "--fix", "."], "Ruff Linting Auto-fix")
+    lint_success = run_command(ruff_cmd + ["check", "--fix", "."], "Ruff Linting Auto-fix")
 
     # Run ruff formatting (modifies files)
-    format_success = run_command(["ruff", "format", "."], "Ruff Format Auto-fix")
+    format_success = run_command(ruff_cmd + ["format", "."], "Ruff Format Auto-fix")
 
     if lint_success and format_success:
         print("\n✅ All fixes applied successfully!")
