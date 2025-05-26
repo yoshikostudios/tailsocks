@@ -47,11 +47,13 @@ class TestCLI(unittest.TestCase):
         mock_manager.start_server.return_value = True
         mock_manager_class.return_value = mock_manager
         
-        # Call the function
-        result = main()
-        
-        # Verify the result
-        self.assertEqual(result, 0)
+        # Mock sys.exit to prevent test from exiting
+        with patch('sys.exit') as mock_exit:
+            # Call the function
+            main()
+            
+            # Verify sys.exit was called with 0
+            mock_exit.assert_called_once_with(0)
         mock_manager_class.assert_called_once_with('test_profile')
         mock_manager.start_server.assert_called_once()
 
@@ -88,18 +90,19 @@ class TestCLI(unittest.TestCase):
         
         # Verify print was called with expected information
         self.assertTrue(mock_print.called)
-        # Check that profile names were printed
-        profile1_printed = False
-        profile2_printed = False
-        for call_args in mock_print.call_args_list:
-            args = call_args[0][0] if call_args[0] else ""
-            if isinstance(args, str) and "profile1" in args:
-                profile1_printed = True
-            if isinstance(args, str) and "profile2" in args:
-                profile2_printed = True
         
-        self.assertTrue(profile1_printed)
-        self.assertTrue(profile2_printed)
+        # Convert all print calls to strings for easier checking
+        printed_lines = []
+        for call_args in mock_print.call_args_list:
+            if call_args[0]:
+                printed_lines.append(str(call_args[0][0]))
+        
+        # Join all printed lines into a single string for easier searching
+        all_output = "\n".join(printed_lines)
+        
+        # Check that profile names were included in the output
+        self.assertIn("profile1", all_output)
+        self.assertIn("profile2", all_output)
 
 
 if __name__ == '__main__':
