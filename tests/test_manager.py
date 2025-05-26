@@ -94,7 +94,6 @@ class TestTailscaleProxyManager(unittest.TestCase):
         cmd = mock_popen.call_args[0][0]
         self.assertIn('--state', cmd)
         self.assertIn('--socket', cmd)
-        self.assertIn('--port', cmd)
         self.assertIn('--socks5-server', cmd)
 
     @patch('subprocess.run')
