@@ -173,6 +173,8 @@ class TailscaleProxyManager:
                 print(f"Port {self.port} is already in use, trying port {self.port + 1}")
                 self.port += 1
             print(f"Using bind address: {self.bind_address}:{self.port}")
+            # Update the bind config with the new port
+            self.config['bind'] = f"{self.bind_address}:{self.port}"
         
         # Create a state file path instead of just using the directory
         state_file = os.path.join(self.state_dir, "tailscale.state")

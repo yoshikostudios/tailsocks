@@ -65,7 +65,7 @@ class TestCLI(unittest.TestCase):
                 'profile_name': 'profile1',
                 'server_running': True,
                 'session_up': True,
-                'socks5_port': 1080,
+                'bind': 'localhost:1080',
                 'ip_address': '100.100.100.100',
                 'config_dir': '/path/to/config1',
                 'cache_dir': '/path/to/cache1'
@@ -74,7 +74,7 @@ class TestCLI(unittest.TestCase):
                 'profile_name': 'profile2',
                 'server_running': False,
                 'session_up': False,
-                'socks5_port': 1081,
+                'bind': 'localhost:1081',
                 'ip_address': 'N/A',
                 'config_dir': '/path/to/config2',
                 'cache_dir': '/path/to/cache2'
