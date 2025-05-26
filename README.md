@@ -167,7 +167,7 @@ To run the tool in development mode:
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.9+
 - Tailscale installed on your system
 - Linux or macOS
 
