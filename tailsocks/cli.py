@@ -31,7 +31,7 @@ def show_status(args):
             print(f"Profile: {status['profile_name']}")
             print(f"  Server running: {'Yes' if status['server_running'] else 'No'}")
             print(f"  Session up: {'Yes' if status['session_up'] else 'No'}")
-            print(f"  SOCKS5 port: {status['socks5_port']}")
+            print(f"  Bind address: {status['bind']}")
             print(f"  IP address: {status['ip_address']}")
             print(f"  Config directory: {status['config_dir']}")
             print(f"  Cache directory: {status['cache_dir']}")
