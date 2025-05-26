@@ -6,6 +6,10 @@ A Tailscale SOCKS5 proxy manager for Linux and macOS.
 
 `tailsocks` allows you to easily create and manage multiple Tailscale SOCKS5 proxies, each with its own profile. This is useful for routing traffic through different Tailscale networks or for testing purposes.
 
+This was inspired by this article on Medium: [How to connect two tailscale networks .. on one linux machine](https://medium.com/@nuyxwksnj/how-to-connect-to-two-tailscale-networks-home-and-work-on-one-linux-machine-06613b57ad67)
+
+
+
 ## Installation
 
 ### Using uv (recommended)
