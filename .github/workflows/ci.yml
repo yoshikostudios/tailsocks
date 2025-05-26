@@ -25,11 +25,10 @@ jobs:
       run: |
         pip install uv
     
-    - name: Create virtual environment and install dependencies
+    - name: Install dependencies
       run: |
-        uv venv
-        uv pip install -r requirements.txt
-        uv pip install -e ".[test,dev]"
+        uv pip install --system -r requirements.txt
+        uv pip install --system -e ".[test,dev]"
     
     - name: Lint with ruff
       run: |
