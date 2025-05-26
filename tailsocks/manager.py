@@ -198,7 +198,7 @@ class TailscaleProxyManager:
             return False
         
         print(f"Tailscaled started with PID {self.tailscaled_process.pid}")
-        print(f"SOCKS5 proxy will be available at {self.socks5_interface}:{self.port}")
+        print(f"SOCKS5 proxy will be available at {self.bind_address}:{self.port}")
         return True
 
     def start_session(self, auth_token=None):
