@@ -10,10 +10,10 @@ readme = "README.md"
 authors = [
     {name = "James Dixson", email = "james@yoshikostudios.com"}
 ]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE*"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -41,6 +41,9 @@ tailsocks = "tailsocks.cli:main"
 [project.urls]
 "Homepage" = "https://github.com/yoshikostudios/tailsocks"
 "Bug Tracker" = "https://github.com/yoshikostudios/tailsocks/issues"
+
+[tool.setuptools]
+packages = ["tailsocks"]
 
 [tool.ruff]
 # Enable flake8-bugbear (`B`) rules.
