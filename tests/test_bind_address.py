@@ -91,6 +91,9 @@ class TestBindAddress(unittest.TestCase):
         cmd = mock_popen.call_args[0][0]
         self.assertIn('--socks5-server', cmd)
         self.assertIn('192.168.1.1:8080', cmd)
+        
+        # Verify that the config was updated and saved
+        self.assertEqual(manager.config['bind'], '192.168.1.1:8080')
 
     @patch('subprocess.Popen')
     @patch('builtins.print')
@@ -119,6 +122,32 @@ class TestBindAddress(unittest.TestCase):
                 break
         
         self.assertTrue(found_message, "Did not find the expected output message with correct bind address and port")
+
+
+    @patch('tailsocks.manager.TailscaleProxyManager._save_config')
+    @patch('tailsocks.cli.TailscaleProxyManager')
+    def test_cli_start_server_updates_config(self, mock_manager_class, mock_save_config):
+        """Test that the CLI start-server command updates the config with the bind address."""
+        # Setup mock manager
+        mock_manager = MagicMock()
+        mock_manager_class.return_value = mock_manager
+        mock_manager._parse_bind_address.return_value = ('192.168.1.1', 8080)
+        
+        # Setup mock args
+        args = MagicMock()
+        args.command = 'start-server'
+        args.profile = 'test_profile'
+        args.bind = '192.168.1.1:8080'
+        
+        # Import and call the main function with mocked args
+        from tailsocks.cli import main
+        with patch('argparse.ArgumentParser.parse_args', return_value=args):
+            main()
+        
+        # Verify that the bind address was updated in the manager
+        mock_manager._parse_bind_address.assert_called_once_with('192.168.1.1:8080')
+        mock_manager.config.__setitem__.assert_called_with('bind', '192.168.1.1:8080')
+        mock_manager._save_config.assert_called_once()
 
 
 if __name__ == '__main__':
