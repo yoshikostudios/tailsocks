@@ -47,17 +47,15 @@ class TestCLI(unittest.TestCase):
         mock_manager.start_server.return_value = True
         mock_manager_class.return_value = mock_manager
         
-        # Mock sys.exit to prevent test from exiting
-        with patch('sys.exit') as mock_exit:
-            # Call the function
-            main()
-            
-            # Verify sys.exit was called with 0
-            mock_exit.assert_called_once_with(0)
+        # Call the function
+        result = main()
+        
+        # Verify the result
+        self.assertEqual(result, 0)
         mock_manager_class.assert_called_once_with('test_profile')
         mock_manager.start_server.assert_called_once()
 
-    @patch('tailsocks.manager.get_all_profiles')
+    @patch('tailsocks.cli.get_all_profiles')
     @patch('builtins.print')
     def test_show_status_all_profiles(self, mock_print, mock_get_all_profiles):
         """Test showing status for all profiles."""
