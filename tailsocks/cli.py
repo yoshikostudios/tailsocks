@@ -107,6 +107,11 @@ def main():
             bind_address, port = manager._parse_bind_address(args.bind)
             manager.bind_address = bind_address
             manager.port = port
+            
+            # Update the config file with the new bind address
+            manager.config['bind'] = f"{bind_address}:{port}"
+            manager._save_config()
+            
         success = manager.start_server()
     elif args.command == 'start-session':
         # Check if the server is running before starting a session

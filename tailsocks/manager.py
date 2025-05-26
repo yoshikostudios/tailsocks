@@ -143,6 +143,16 @@ class TailscaleProxyManager:
         except yaml.YAMLError as e:
             print(f"Error parsing config file: {e}")
             return {}
+            
+    def _save_config(self):
+        """Save the current configuration to the YAML file"""
+        try:
+            with open(self.config_path, 'w') as f:
+                yaml.dump(self.config, f, default_flow_style=False)
+            return True
+        except Exception as e:
+            print(f"Error saving config file: {e}")
+            return False
 
     def start_server(self):
         """Start the tailscaled process with custom state directory and socket"""
