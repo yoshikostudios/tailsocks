@@ -33,7 +33,7 @@ class TestCLI(unittest.TestCase):
         mock_show_status.assert_called_once_with(args)
 
     @patch('argparse.ArgumentParser.parse_args')
-    @patch('tailsocks.manager.TailscaleProxyManager')
+    @patch('tailsocks.cli.TailscaleProxyManager')
     def test_start_server_command(self, mock_manager_class, mock_parse_args):
         """Test the start-server command."""
         # Configure mocks
@@ -47,15 +47,13 @@ class TestCLI(unittest.TestCase):
         mock_manager.start_server.return_value = True
         mock_manager_class.return_value = mock_manager
         
-        # Mock the actual execution to avoid running tailscaled
-        with patch('tailsocks.cli.TailscaleProxyManager', return_value=mock_manager):
-            # Call the function
-            result = main()
-            
-            # Verify the result
-            self.assertEqual(result, 0)
-            mock_manager_class.assert_called_once_with('test_profile')
-            mock_manager.start_server.assert_called_once()
+        # Call the function
+        result = main()
+        
+        # Verify the result
+        self.assertEqual(result, 0)
+        mock_manager_class.assert_called_once_with('test_profile')
+        mock_manager.start_server.assert_called_once()
 
     @patch('tailsocks.cli.get_all_profiles')
     @patch('builtins.print')
