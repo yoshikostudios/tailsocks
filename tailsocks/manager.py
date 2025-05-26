@@ -165,7 +165,6 @@ class TailscaleProxyManager:
             self.tailscaled_path,
             '--state', self.state_dir,
             '--socket', self.socket_path,
-            '--port', str(self.port),
             '--socks5-server', f'{self.socks5_interface}:{self.port}',
             '--tun=userspace-networking'
         ]
