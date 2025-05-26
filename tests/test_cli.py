@@ -47,13 +47,15 @@ class TestCLI(unittest.TestCase):
         mock_manager.start_server.return_value = True
         mock_manager_class.return_value = mock_manager
         
-        # Call the function
-        result = main()
-        
-        # Verify the result
-        self.assertEqual(result, 0)
-        mock_manager_class.assert_called_once_with('test_profile')
-        mock_manager.start_server.assert_called_once()
+        # Mock the actual execution to avoid running tailscaled
+        with patch('tailsocks.cli.TailscaleProxyManager', return_value=mock_manager):
+            # Call the function
+            result = main()
+            
+            # Verify the result
+            self.assertEqual(result, 0)
+            mock_manager_class.assert_called_once_with('test_profile')
+            mock_manager.start_server.assert_called_once()
 
     @patch('tailsocks.cli.get_all_profiles')
     @patch('builtins.print')
