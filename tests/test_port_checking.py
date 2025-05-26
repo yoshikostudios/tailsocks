@@ -43,7 +43,11 @@ class TestPortChecking(unittest.TestCase):
         self.mock_socket_instance.connect_ex.reset_mock()
         
         # Start the server
-        with patch('subprocess.Popen'):  # Prevent actual process creation
+        mock_process = MagicMock()
+        mock_process.poll.return_value = None  # Process is running
+        mock_process.communicate.return_value = ('', '')  # Return empty stdout and stderr
+        
+        with patch('subprocess.Popen', return_value=mock_process):  # Prevent actual process creation
             manager.start_server()
         
         # Verify connect_ex was called during start_server
