@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import random
+import shutil
 import signal
 import socket
 import subprocess
@@ -15,6 +16,8 @@ import time
 from typing import Any, Dict, Tuple
 
 import yaml
+
+from tailsocks.logger import setup_logger
 
 
 class TailscaleProxyManager:
@@ -26,6 +29,9 @@ class TailscaleProxyManager:
         self.config_dir = os.path.expanduser(f"~/.config/tailscale-{self.profile_name}")
         self.cache_dir = os.path.expanduser(f"~/.cache/tailscale-{self.profile_name}")
         self.config_path = os.path.join(self.config_dir, "config.yaml")
+
+        # Set up logger
+        self.logger = setup_logger(f"tailsocks.{self.profile_name}")
 
         # Ensure both directories exist
         os.makedirs(self.config_dir, exist_ok=True)
@@ -68,6 +74,10 @@ class TailscaleProxyManager:
         )
         self.tailscaled_process = None
 
+        self.logger.debug(
+            f"Initialized TailscaleProxyManager for profile '{self.profile_name}'"
+        )
+
     def _default_tailscales(self):
         # Set paths based on OS
         system = platform.system()
@@ -85,6 +95,11 @@ class TailscaleProxyManager:
 
     def _generate_random_profile_name(self):
         """Generate a friendly random profile name that's not already in use"""
+        # Check if we're running in a test environment
+        import sys
+
+        is_test = "pytest" in sys.modules
+
         adjectives = [
             "happy",
             "sunny",
@@ -122,13 +137,21 @@ class TailscaleProxyManager:
 
         # Try to generate a unique name (max 10 attempts)
         for _ in range(10):
-            name = f"{random.choice(adjectives)}_{random.choice(animals)}"
+            if is_test:
+                name = f"test_{random.choice(adjectives)}_{random.choice(animals)}"
+            else:
+                name = f"{random.choice(adjectives)}_{random.choice(animals)}"
+
             if name not in existing_profiles:
                 return name
 
         # If we couldn't find a unique name, add a random number
         while True:
-            name = f"{random.choice(adjectives)}_{random.choice(animals)}_{random.randint(1, 999)}"
+            if is_test:
+                name = f"test_{random.choice(adjectives)}_{random.choice(animals)}_{random.randint(1, 999)}"
+            else:
+                name = f"{random.choice(adjectives)}_{random.choice(animals)}_{random.randint(1, 999)}"
+
             if name not in existing_profiles:
                 return name
 
@@ -183,11 +206,15 @@ class TailscaleProxyManager:
         """Load configuration from YAML file"""
         try:
             with open(self.config_path, "r") as f:
-                return yaml.safe_load(f) or {}
+                config = yaml.safe_load(f) or {}
+                self.logger.debug(f"Loaded configuration from {self.config_path}")
+                return config
         except FileNotFoundError:
-            print(f"Config file not found: {self.config_path}")
+            # Config file not found is a normal case, not an error
+            self.logger.debug(f"No configuration file found at {self.config_path}")
             return {}
         except yaml.YAMLError as e:
+            self.logger.error(f"Error parsing config file: {e}")
             print(f"Error parsing config file: {e}")
             return {}
 
@@ -200,7 +227,9 @@ class TailscaleProxyManager:
         if not log_only:
             print(error_msg)
 
-        # Could add logging here in the future
+        # Log the error
+        self.logger.error(error_msg)
+
         return False
 
     def _save_config(self):
@@ -208,6 +237,7 @@ class TailscaleProxyManager:
         try:
             with open(self.config_path, "w") as f:
                 yaml.dump(self.config, f, default_flow_style=False)
+            self.logger.debug(f"Saved configuration to {self.config_path}")
             return True
         except Exception as e:
             return self._handle_error("Error saving config file", e)
@@ -217,10 +247,14 @@ class TailscaleProxyManager:
         state_path = os.path.join(self.cache_dir, "state.yml")
         try:
             with open(state_path, "r") as f:
-                return yaml.safe_load(f) or {}
+                state = yaml.safe_load(f) or {}
+                self.logger.debug(f"Loaded state from {state_path}")
+                return state
         except FileNotFoundError:
+            self.logger.debug(f"No state file found at {state_path}")
             return {}
         except yaml.YAMLError as e:
+            self.logger.error(f"Error parsing state file: {e}")
             print(f"Error parsing state file: {e}")
             return {}
 
@@ -243,13 +277,38 @@ class TailscaleProxyManager:
 
             with open(state_path, "w") as f:
                 yaml.dump(state, f, default_flow_style=False)
+            self.logger.debug(f"Saved state to {state_path}")
             return True
         except Exception as e:
             return self._handle_error("Error saving state file", e)
 
+    def delete_profile(self):
+        """Delete this profile's configuration and cache directories."""
+        if self._is_server_running():
+            print(
+                "Cannot delete profile while server is running. Stop the server first."
+            )
+            return False
+
+        try:
+            # Remove config directory
+            if os.path.exists(self.config_dir):
+                shutil.rmtree(self.config_dir)
+                print(f"Removed config directory: {self.config_dir}")
+
+            # Remove cache directory
+            if os.path.exists(self.cache_dir):
+                shutil.rmtree(self.cache_dir)
+                print(f"Removed cache directory: {self.cache_dir}")
+
+            return True
+        except Exception as e:
+            return self._handle_error(f"Error deleting profile {self.profile_name}", e)
+
     def start_server(self):
         """Start the tailscaled process with custom state directory and socket"""
         if self._is_server_running():
+            self.logger.info("Tailscaled is already running")
             print("Tailscaled is already running")
             return True
 
@@ -264,7 +323,19 @@ class TailscaleProxyManager:
         # Save the runtime state
         self._save_state()
 
-        print(f"Tailscaled started with PID {self.tailscaled_process.pid}")
+        # Only try to access pid if tailscaled_process is not None
+        if self.tailscaled_process:
+            self.logger.info(
+                f"Tailscaled started with PID {self.tailscaled_process.pid}"
+            )
+            print(f"Tailscaled started with PID {self.tailscaled_process.pid}")
+        else:
+            self.logger.info("Tailscaled started successfully")
+            print("Tailscaled started successfully")
+
+        self.logger.info(
+            f"SOCKS5 proxy will be available at {self.bind_address}:{self.port}"
+        )
         print(f"SOCKS5 proxy will be available at {self.bind_address}:{self.port}")
         return True
 
@@ -274,26 +345,40 @@ class TailscaleProxyManager:
             # If bind is explicitly configured, verify the port is available
             if self._is_port_in_use(self.port):
                 original_port = self.port
+                self.logger.debug(
+                    f"Configured port {original_port} is in use, searching for available port"
+                )
                 while self._is_port_in_use(self.port):
-                    self.port += 1
+                    self.port += 1  # Increment the port number
                     if self.port > original_port + 100:  # Limit search to 100 ports
-                        print(
-                            f"Error: Configured port {original_port} in bind address {self.bind_address}:{original_port} is already in use."
-                        )
+                        error_msg = f"Error: Configured port {original_port} in bind address {self.bind_address}:{original_port} is already in use."
+                        self.logger.error(error_msg)
+                        print(error_msg)
                         print("Please modify your config.yaml to use a different port.")
                         return False
 
                 # Update the bind config with the new port
+                self.logger.info(
+                    f"Port {original_port} is already in use, using port {self.port} instead"
+                )
                 print(
                     f"Port {original_port} is already in use, using port {self.port} instead"
                 )
+                # Update the state to reflect the new port
+                self.state["port"] = self.port
+                # Also update the bind string in the state
+                self.state["bind"] = f"{self.bind_address}:{self.port}"
         else:
             # If bind is not configured, start with default and find an available port
             while self._is_port_in_use(self.port):
+                self.logger.debug(
+                    f"Port {self.port} is already in use, trying port {self.port + 1}"
+                )
                 print(
                     f"Port {self.port} is already in use, trying port {self.port + 1}"
                 )
                 self.port += 1
+            self.logger.info(f"Using bind address: {self.bind_address}:{self.port}")
             print(f"Using bind address: {self.bind_address}:{self.port}")
 
         return True
@@ -318,6 +403,7 @@ class TailscaleProxyManager:
         if "tailscaled_args" in self.config:
             cmd.extend(self.config["tailscaled_args"])
 
+        self.logger.info(f"Starting tailscaled with command: {' '.join(cmd)}")
         print(f"Starting tailscaled with command: {' '.join(cmd)}")
 
         # Start tailscaled as a background process
@@ -330,9 +416,12 @@ class TailscaleProxyManager:
 
         if self.tailscaled_process.poll() is not None:
             stdout, stderr = self.tailscaled_process.communicate()
-            print(f"Failed to start tailscaled: {stderr}")
+            error_msg = f"Failed to start tailscaled: {stderr}"
+            self.logger.error(error_msg)
+            print(error_msg)
             return False
 
+        self.logger.debug("Tailscaled process started successfully")
         return True
 
     def start_session(self, auth_token=None):
@@ -501,16 +590,19 @@ class TailscaleProxyManager:
         """Check if tailscaled is running by checking the socket file and process existence"""
         # First check if the socket file exists
         if not os.path.exists(self.socket_path):
+            self.logger.debug(f"Socket file does not exist: {self.socket_path}")
             return False
 
         # Try to find the process ID
         pid = self._find_tailscaled_pid()
         if pid:
             # If we found a PID, the server is running
+            self.logger.debug(f"Found tailscaled process with PID {pid}")
             return True
 
         # As a fallback, try to use the socket to check status
         cmd = [self.tailscale_path, "--socket", self.socket_path, "status"]
+        self.logger.debug(f"Checking server status with command: {' '.join(cmd)}")
 
         try:
             process = subprocess.run(
@@ -519,20 +611,38 @@ class TailscaleProxyManager:
                 stderr=subprocess.DEVNULL,
                 timeout=5,  # Increase timeout from 2 to 5 seconds
             )
-            return process.returncode == 0
-        except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+            if process.returncode == 0:
+                self.logger.debug(
+                    "Server is running (confirmed via socket status check)"
+                )
+                return True
+            else:
+                self.logger.debug(
+                    f"Socket status check failed with return code {process.returncode}"
+                )
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            self.logger.debug(f"Socket status check failed: {str(e)}")
             # If the socket check fails, check if we can find the process by looking for the command line
             try:
                 # Look for a process with our socket path in its command line
                 system = platform.system()
                 if system in ["Linux", "Darwin"]:  # Linux or macOS
                     cmd = ["pgrep", "-f", f"tailscaled.*{self.socket_path}"]
+                    self.logger.debug(f"Trying pgrep fallback: {' '.join(cmd)}")
                     result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
-                    return result.returncode == 0 and bool(result.stdout.strip())
-            except subprocess.SubprocessError:
+                    if result.returncode == 0 and bool(result.stdout.strip()):
+                        self.logger.debug(
+                            "Server is running (confirmed via pgrep fallback)"
+                        )
+                        return True
+                    else:
+                        self.logger.debug("pgrep fallback found no matching process")
+            except subprocess.SubprocessError as e:
+                self.logger.debug(f"pgrep fallback failed: {str(e)}")
                 pass
 
-            return False
+        self.logger.debug("Server is not running")
+        return False
 
     def _is_port_in_use(self, port):
         """Check if the given port is already in use"""
@@ -546,23 +656,38 @@ class TailscaleProxyManager:
         if system in ["Linux", "Darwin"]:  # Linux or macOS
             try:
                 cmd = ["pgrep", "-f", f"tailscaled.*{self.socket_path}"]
+                self.logger.debug(f"Running command to find PID: {' '.join(cmd)}")
                 result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
                 if result.returncode == 0 and result.stdout.strip():
-                    return int(result.stdout.strip())
-            except (subprocess.SubprocessError, ValueError):
+                    # Parse the first PID from the output
+                    pids = result.stdout.strip().split("\n")
+                    if pids and pids[0].strip():
+                        pid = int(pids[0].strip())
+                        self.logger.debug(f"Found tailscaled PID: {pid}")
+                        return pid
+            except (subprocess.SubprocessError, ValueError) as e:
+                self.logger.debug(f"Error finding tailscaled PID: {str(e)}")
                 pass
         else:  # Windows or other
             # This is a simplified approach for Windows
             try:
                 cmd = ["tasklist", "/FI", "IMAGENAME eq tailscaled.exe", "/FO", "CSV"]
+                self.logger.debug(
+                    f"Running Windows command to find PID: {' '.join(cmd)}"
+                )
                 result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
                 if "tailscaled.exe" in result.stdout:
+                    self.logger.debug(
+                        "Found tailscaled.exe in process list, but cannot determine specific instance"
+                    )
                     # This doesn't actually get the right PID for the specific socket
                     # A more sophisticated approach would be needed for Windows
                     pass
-            except subprocess.SubprocessError:
+            except subprocess.SubprocessError as e:
+                self.logger.debug(f"Error finding tailscaled PID on Windows: {str(e)}")
                 pass
 
+        self.logger.debug("No tailscaled PID found")
         return None
 
 

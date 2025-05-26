@@ -4,8 +4,10 @@ Command-line interface for tailsocks.
 """
 
 import argparse
+import logging
 import sys
 
+from tailsocks.logger import setup_logger
 from tailsocks.manager import TailscaleProxyManager, get_all_profiles
 
 
@@ -213,6 +215,7 @@ def main():
     parser.add_argument(
         "--version", "-v", action="store_true", help="Show version information"
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
@@ -245,6 +248,11 @@ def main():
     subparsers.add_parser("status", help="Show status of profiles")
 
     args = parser.parse_args()
+
+    # Set up logging based on verbose flag
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logger = setup_logger("tailsocks", log_level)
+    logger.debug("Verbose logging enabled")
 
     if args.version:
         from tailsocks import __version__

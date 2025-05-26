@@ -40,6 +40,20 @@ class TestStatusDisplay:
         assert "Bind address: localhost:1080" in captured.out
         assert "IP address: 100.100.100.100" in captured.out
 
+    def test_print_status_with_partial_data(self, capsys):
+        """Test printing status with missing fields."""
+        status = {
+            "profile_name": "test_profile",
+            "server_running": True,
+            # Missing some fields
+        }
+
+        _print_status(status)
+        captured = capsys.readouterr()
+
+        assert "test_profile" in captured.out
+        assert "Server running: Yes" in captured.out
+
     def test_print_status_without_header(self, capsys):
         """Test printing status information without header."""
         status = {
@@ -294,6 +308,25 @@ class TestCommandDispatch:
                     mock_manager_class.assert_called_once_with("selected_profile")
                     mock_handler.assert_called_once_with(mock_manager, args)
 
+    def test_handle_command_with_verbose_flag(self, mocker):
+        """Test handling commands with verbose flag set."""
+        args = MagicMock()
+        args.command = "start-server"
+        args.verbose = True
+        args.profile = "test_profile"
+
+        with patch("tailsocks.cli.TailscaleProxyManager") as mock_manager_class:
+            mock_manager = MagicMock()
+            mock_manager_class.return_value = mock_manager
+
+            with patch(
+                "tailsocks.cli._handle_start_server", return_value=True
+            ) as mock_handler:
+                result = handle_command(args)
+
+                assert result == 0
+                mock_handler.assert_called_once_with(mock_manager, args)
+
     def test_handle_command_with_failed_profile_selection(self, mocker):
         """Test handling commands when profile selection fails."""
         args = MagicMock()
@@ -425,6 +458,26 @@ class TestMainFunction:
         captured = capsys.readouterr()
         assert "tailsocks version 0.1.0" in captured.out
 
+    def test_cli_verbose_mode(self, mocker):
+        """Test CLI with verbose mode enabled."""
+        # Mock parse_args to return args with verbose=True
+        args = MagicMock()
+        args.version = False
+        args.command = "status"
+        args.verbose = True
+        mocker.patch("argparse.ArgumentParser.parse_args", return_value=args)
+
+        # Mock handle_command
+        mock_handle = mocker.patch("tailsocks.cli.handle_command", return_value=0)
+
+        # Call main
+        result = main()
+
+        # Verify result and that handle_command was called with verbose args
+        assert result == 0
+        mock_handle.assert_called_once_with(args)
+        assert args.verbose is True
+
     def test_main_no_command(self, mocker):
         """Test main function with no command."""
         # Mock parse_args to return args with no command
@@ -451,4 +504,19 @@ class TestMainFunction:
             result = main()
 
             assert result == 0
+            mock_handle.assert_called_once_with(args)
+
+    def test_main_with_invalid_command(self, mocker):
+        """Test main function with an invalid command."""
+        # Mock parse_args to return args with an invalid command
+        args = MagicMock()
+        args.version = False
+        args.command = "invalid-command"
+        args.profile = "test_profile"
+        mocker.patch("argparse.ArgumentParser.parse_args", return_value=args)
+
+        with patch("tailsocks.cli.handle_command", return_value=1) as mock_handle:
+            result = main()
+
+            assert result == 1
             mock_handle.assert_called_once_with(args)

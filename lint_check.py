@@ -2,6 +2,9 @@
 """
 Script to perform linting and formatting checks on the tailsocks project.
 Uses ruff as specified in the project conventions.
+
+Copyright (c) 2025 Yoshiko Studios LLC
+License: MIT
 """
 
 import os
@@ -38,6 +41,7 @@ def main():
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("Error: ruff is not installed or not in PATH.")
         print("Install it with: pip install ruff")
+        print("Or preferably: uv pip install ruff")
         return False
 
     # Run ruff linting with auto-fix
