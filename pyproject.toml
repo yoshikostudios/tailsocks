@@ -20,7 +20,7 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Topic :: System :: Networking",
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 dependencies = [
     "pyyaml>=6.0",
 ]
@@ -64,8 +64,8 @@ line-length = 88
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-# Assume Python 3.7
-target-version = "py37"
+# Assume Python 3.9
+target-version = "py39"
 
 [tool.ruff.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
