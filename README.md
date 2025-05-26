@@ -169,7 +169,13 @@ To run the tool in development mode:
 
 - Python 3.9+
 - Tailscale installed on your system
-- Linux or macOS
+- Linux
+
+## Future Plans
+
+ - macOS (close, but not extensively tested)
+ - integrate with systemd on linux/macos
+ - full windows support 
 
 ## License
 
