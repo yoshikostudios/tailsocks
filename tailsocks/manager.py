@@ -161,9 +161,12 @@ class TailscaleProxyManager:
                     self.port += 1
                 print(f"Switched from port {original_port} to port {self.port}")
         
+        # Create a state file path instead of just using the directory
+        state_file = os.path.join(self.state_dir, "tailscale.state")
+        
         cmd = [
             self.tailscaled_path,
-            '--state', self.state_dir,
+            '--state', state_file,  # Use the state file path instead of just the directory
             '--socket', self.socket_path,
             '--socks5-server', f'{self.socks5_interface}:{self.port}',
             '--tun=userspace-networking'
