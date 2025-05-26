@@ -1,2 +1,5 @@
 # tailsocks dependencies
 pyyaml>=6.0
+# testing dependencies
+pytest>=7.0.0
+attrs>=21.4.0
