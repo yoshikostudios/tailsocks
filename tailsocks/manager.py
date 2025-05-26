@@ -344,11 +344,18 @@ class TailscaleProxyManager:
         }
     
     def _is_server_running(self):
-        """Check if tailscaled is running by checking the socket file"""
+        """Check if tailscaled is running by checking the socket file and process existence"""
+        # First check if the socket file exists
         if not os.path.exists(self.socket_path):
             return False
         
-        # Try to use the socket to check status
+        # Try to find the process ID
+        pid = self._find_tailscaled_pid()
+        if pid:
+            # If we found a PID, the server is running
+            return True
+        
+        # As a fallback, try to use the socket to check status
         cmd = [
             self.tailscale_path,
             '--socket', self.socket_path,
@@ -360,10 +367,21 @@ class TailscaleProxyManager:
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                timeout=2
+                timeout=5  # Increase timeout from 2 to 5 seconds
             )
             return process.returncode == 0
         except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+            # If the socket check fails, check if we can find the process by looking for the command line
+            try:
+                # Look for a process with our socket path in its command line
+                system = platform.system()
+                if system in ['Linux', 'Darwin']:  # Linux or macOS
+                    cmd = ['pgrep', '-f', f'tailscaled.*{self.socket_path}']
+                    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+                    return result.returncode == 0 and bool(result.stdout.strip())
+            except subprocess.SubprocessError:
+                pass
+            
             return False
     
     def _is_port_in_use(self, port):
