@@ -104,6 +104,7 @@ def main():
     if args.command == 'start-server':
         # If bind is specified, update the manager's config
         if hasattr(args, 'bind') and args.bind:
+            # Explicitly call _parse_bind_address to parse the bind address
             bind_address, port = manager._parse_bind_address(args.bind)
             manager.bind_address = bind_address
             manager.port = port

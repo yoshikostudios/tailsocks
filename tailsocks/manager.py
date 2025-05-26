@@ -164,9 +164,18 @@ class TailscaleProxyManager:
         if 'bind' in self.config:
             # If bind is explicitly configured, verify the port is available
             if self._is_port_in_use(self.port):
-                print(f"Error: Configured port {self.port} in bind address {self.bind_address}:{self.port} is already in use.")
-                print("Please modify your config.yaml to use a different port.")
-                return False
+                # Instead of just returning False, try to find an available port
+                original_port = self.port
+                while self._is_port_in_use(self.port):
+                    self.port += 1
+                    if self.port > original_port + 100:  # Limit search to 100 ports
+                        print(f"Error: Configured port {original_port} in bind address {self.bind_address}:{original_port} is already in use.")
+                        print("Please modify your config.yaml to use a different port.")
+                        return False
+            
+                # Update the bind config with the new port
+                print(f"Port {original_port} is already in use, using port {self.port} instead")
+                self.config['bind'] = f"{self.bind_address}:{self.port}"
         else:
             # If bind is not configured, start with default and find an available port
             while self._is_port_in_use(self.port):
