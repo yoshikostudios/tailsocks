@@ -1,6 +1,6 @@
 # tailsocks
 
-A Tailscale SOCKS5 proxy manager for Linux, macOS, and WSL.
+A Tailscale SOCKS5 proxy manager for Linux and macOS.
 
 ## Description
 
@@ -29,11 +29,6 @@ To upgrade to the latest version:
 uv pip install --upgrade tailsocks
 ```
 
-### Using pip
-
-```bash
-pip install tailsocks
-```
 
 After installation, you can run `tailsocks` directly from your terminal.
 
@@ -89,22 +84,30 @@ tailsocks start-session
 ### Using a specific profile
 
 ```bash
-tailsocks --profile my_profile start-server
-tailsocks --profile my_profile start-session
+tailsocks --profile profile_name start-server
+tailsocks --profile profile_name start-session
 ```
 
 ### Checking status
 
 ```bash
-tailsocks status
+tailsocks [--profile profile_name] status
 ```
 
 ### Stopping a session or server
 
 ```bash
-tailsocks stop-session
-tailsocks stop-server
+tailsocks [--profile profile_name] stop-session
+tailsocks [--profile profile_name] stop-server
 ```
+
+### Deleting a profile
+
+```bash
+tailsocks --profile profile_name delete-profile
+```
+
+This will completely remove a profile's configuration and cache directories. The profile must be stopped first (using `stop-server`).
 
 ## Configuration
 
@@ -115,14 +118,14 @@ Example configuration:
 ```yaml
 tailscaled_path: /usr/sbin/tailscaled
 tailscale_path: /usr/bin/tailscale
-socket_path: /home/user/.cache/tailscale-my_profile/tailscaled.sock
+socket_path: /home/user/.cache/tailscale-{profile_name}/tailscaled.sock
 accept_routes: true
 accept_dns: true
 bind: localhost:1080  # Format: address:port
 tailscaled_args:
   - --verbose=1
 tailscale_up_args:
-  - --hostname=my_profile-proxy
+  - --hostname={profile_name}-proxy
 ```
 
 ## Development
@@ -138,12 +141,12 @@ To run the tool in development mode:
 2. Create a virtual environment using uv:
    ```bash
    uv venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   source .venv/bin/activate
    ```
 
 3. Install in development mode with test dependencies:
    ```bash
-   uv pip install -e ".[test]"
+   uv pip install -e ".[test,dev]"
    ```
 
 4. Run tests:
@@ -151,7 +154,13 @@ To run the tool in development mode:
    pytest
    ```
 
-5. Run the tool:
+5. Format and lint code:
+   ```bash
+   ruff format .
+   ruff check .
+   ```
+
+6. Run the tool:
    ```bash
    python -m tailsocks
    ```
@@ -160,8 +169,8 @@ To run the tool in development mode:
 
 - Python 3.7+
 - Tailscale installed on your system
-- Linux, macOS, or Windows with WSL
+- Linux or macOS
 
 ## License
 
-MIT License - Copyright (c) 2025 Yoshiko Studios
+MIT License - Copyright (c) 2025 Yoshiko Studios LLC
