@@ -42,21 +42,9 @@ class TailscaleProxyManager:
         self.state_dir = self.cache_dir
         self.socket_path = self.config.get('socket_path', os.path.join(self.state_dir, 'tailscaled.sock'))
         
-        # Handle port selection logic
-        if 'socks5_port' in self.config:
-            # If port is explicitly configured, verify it's available
-            self.port = self.config['socks5_port']
-            if self._is_port_in_use(self.port):
-                print(f"Error: Configured SOCKS5 port {self.port} is already in use by another process.")
-                print("Please modify your config.yaml to use a different port.")
-                sys.exit(1)
-        else:
-            # If port is not configured, start with default and find an available port
-            self.port = 1080
-            while self._is_port_in_use(self.port):
-                print(f"Port {self.port} is already in use, trying port {self.port + 1}")
-                self.port += 1
-            print(f"Using SOCKS5 port: {self.port}")
+        # Get the configured port but don't check availability yet
+        # We'll check availability only when starting the server
+        self.port = self.config.get('socks5_port', 1080)
         
         # Handle interface selection
         self.socks5_interface = self.config.get('socks5_interface', 'localhost')
@@ -148,18 +136,19 @@ class TailscaleProxyManager:
             print("Tailscaled is already running")
             return True
         
-        # Double-check the port is still available before starting
-        if self._is_port_in_use(self.port):
-            print(f"Error: SOCKS5 port {self.port} is now in use by another process.")
-            if 'socks5_port' in self.config:
+        # Check port availability only when starting the server
+        if 'socks5_port' in self.config:
+            # If port is explicitly configured, verify it's available
+            if self._is_port_in_use(self.port):
+                print(f"Error: Configured SOCKS5 port {self.port} is already in use by another process.")
                 print("Please modify your config.yaml to use a different port.")
                 return False
-            else:
-                # Try to find another port
-                original_port = self.port
-                while self._is_port_in_use(self.port):
-                    self.port += 1
-                print(f"Switched from port {original_port} to port {self.port}")
+        else:
+            # If port is not configured, start with default and find an available port
+            while self._is_port_in_use(self.port):
+                print(f"Port {self.port} is already in use, trying port {self.port + 1}")
+                self.port += 1
+            print(f"Using SOCKS5 port: {self.port}")
         
         # Create a state file path instead of just using the directory
         state_file = os.path.join(self.state_dir, "tailscale.state")
