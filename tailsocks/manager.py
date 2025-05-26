@@ -166,7 +166,8 @@ class TailscaleProxyManager:
             '--state', self.state_dir,
             '--socket', self.socket_path,
             '--port', str(self.port),
-            '--socks5-server', f'{self.socks5_interface}:{self.port}'
+            '--socks5-server', f'{self.socks5_interface}:{self.port}',
+            '--tun=userspace-networking'
         ]
         
         # Add any additional tailscaled args from config
