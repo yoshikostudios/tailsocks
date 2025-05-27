@@ -119,3 +119,12 @@ pip install --upgrade tailsocks
 # Verify the installation
 python -c "import tailsocks; print(tailsocks.__version__)"
 ```
+
+## Things to do
+
+ - [ ] Use systemd to manage the server instances
+ - [ ] test on macOS
+ - [ ] validate and test on Windows11/Windows Server
+ - [ ] set the tailscale hostname from the profile name
+ - [ ] passthru tailscale status
+ 
