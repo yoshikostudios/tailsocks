@@ -2,6 +2,9 @@
 
 A Tailscale SOCKS5 proxy manager for Linux and macOS.
 
+*Work in Progress*
+
+
 ## Description
 
 `tailsocks` allows you to easily create and manage multiple Tailscale SOCKS5 proxies, each with its own profile. This is useful for routing traffic through different Tailscale networks or for testing purposes.
